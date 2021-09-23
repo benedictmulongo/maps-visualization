@@ -44,6 +44,10 @@
 <body>
 
 <script type="text/javascript">
+    // Shape file for all countries: https://gadm.org/download_country_v3.html
+    // conveert shapefile mapshaper : https://mapshaper.org/
+    // https://gadm.org/download_country_v3.html
+    // GeoJson of every countries: https://github.com/deldersveld/topojson
     /*
     TODO: For labelling a country or region or add blob by [lat,lon]:
     https://www.youtube.com/watch?v=aNbgrqRuoiE
@@ -98,10 +102,9 @@
         }
     )
     domainRange = selectDivisionNumber(domainRange)
-    const colorScale = d3.scaleLinear()
-        .domain(domainRange)
-        //I goofed, so this has to be in reverse order
-        .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+    const colorScale = d3.scaleSequential(d3.interpolateCool).domain(domainRange);
+    // const colorScale = d3.scaleLinear().domain(domainRange).range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+    // const colorScale = d3.scaleLinear().domain(domainRange).range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
     /*
     uStates.draw = function(id, data, toolTip){
         function mouseOver(d){
@@ -297,6 +300,63 @@
                         console.log(d)
                         return d
                     });
+
+                // var colorScale1 = d3.scaleSequential(d3.interpolatePlasma).domain([0, 9]);
+                var colorScale1 = d3.scaleSequential(d3.interpolateCool).domain([0, 9]);
+                console.log('colorScale1')
+                console.log(colorScale1(2))
+                var legend2 = svg.append('g')
+                    .attr('transform', 'translate(825, 400)')
+                    .attr('id', 'legend');
+                legend2.selectAll('.colorbar')
+                    .data(d3.range(9))
+                    .enter().append('svg:rect')
+                    .attr('y', d => d * 20 + 'px')
+                    .attr('height', '20px')
+                    .attr('width', '20px')
+                    .attr('x', '0px')
+                    .attr("class", d => "q" + d + "-9")
+                    .style('fill', d => colorScale1(d))
+                var legendScale = d3.scaleLinear()
+                    .domain([0, 1000])
+                    .range([0, 9 * 20]);
+                var legendAxis = svg.append("g")
+                    // .attr('transform', 'translate(850, 400)')
+                    .attr('transform', 'translate(850, 400)')
+                    .call(d3.axisRight(legendScale).ticks(6));
+
+
+                var legend3 = svg.append('g')
+                    .attr('transform', 'translate(650, 200)')
+                    .attr('id', 'legend');
+
+                legend3.selectAll('.colorbar')
+                    .data(d3.range(9))
+                    .enter().append('svg:rect')
+                    .attr('y', '0px')
+                    .attr('height', '20px')
+                    .attr('width', '20px')
+                    .attr('x', d => d * 20 + 'px')
+                    .attr("class", d => "q" + d + "-9")
+                    .style('fill', d => colorScale1(d))
+
+                var legendScale3 = d3.scaleLinear()
+                    .domain([0, 1000])
+                    .range([0, 9 * 20]);
+                var legendAxis = svg.append("g")
+                    // .attr('transform', 'translate(850, 400)')
+                    .attr('transform', 'translate(650, 195)rotate(-90)')
+                    .call(d3.axisRight(legendScale).ticks(6))
+                    .selectAll("text")
+                    .attr("y", 54)
+                    .attr("x", 1)
+                    .attr("dx", "0.4em")
+                    .attr("dy", "-4.1em")
+                    .attr("transform", "rotate(45)")
+                    .attr('font-size','15px')
+                    .style("text-anchor", "start");
+
+
             });
 </script>
 
