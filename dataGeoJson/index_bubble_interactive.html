@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.5.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
+    <style>
+        /*
+        svg {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .country {
+            fill: #ccc;
+            stroke: #999;
+        }
+         */
+        .state {
+            stroke-width: 0.5;
+            stroke: #000000;
+        }
+        .state:hover {
+            fill: #92a5e3;
+            cursor: pointer;
+        }
+        div.tooltip {
+            position: absolute;
+            text-align: center;
+            width: 60px;
+            min-height: 28px;
+            padding: 8px 12px;
+            font: 12px sans-serif;
+            background: lightgray;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+    /*
+    TODO: For labelling a country or region or add blob by [lat,lon]:
+    https://www.youtube.com/watch?v=aNbgrqRuoiE
+    */
+    /*
+    TODO:
+    Notes:
+        * While this graph is great, one improvement it could use is the labeling of the legend.
+        * The tooltip pointer could use a little CSS styling to add an arrow
+        * A small delay could be added to the movement of the tooltip to make
+         its movements feel more natural
+    */
+    /*
+    TODO: check out rotate
+    var projection = d3.geo.albers()
+    .center([0, 55.4])
+    .rotate([4.4, 0])
+    .parallels([50, 60])
+    .scale(6000)
+    .translate([width / 2, height / 2]);
+    */
+    // https://geojson.io/
+    // https://www.datavis.fr/index.php#d3js
+    // https://d3-wiki.readthedocs.io/zh_CN/master/Gallery/
+    // https://simplemaps.com/data/se-cities
+    // Sverige har idag 21 län och 290 kommuner.'
+    function selectDivisionNumber(array) {
+        let arraySize = array.length,
+            halfArray = Math.round(arraySize / 2);
+        let newArr = [];
+        //Take first and last item and push them to the array
+        newArr.push(array[0])
+        newArr.push(array[arraySize - 1]);
+        //Don't mind the order, they will be sorted later.
+        //Divide the array in two
+        let firstHalf = array.slice(0, halfArray);
+        let firstHalfSelection = firstHalf[Math.round(firstHalf.length / 2)];
+        newArr.push(firstHalfSelection);
+
+        let secondHalf = array.slice(halfArray, arraySize);
+        let secondHalfSelection = secondHalf[Math.round(secondHalf.length / 2)];
+        newArr.push(secondHalfSelection);
+        return newArr;
+    }
+    const fileUrl = 'municipalityJson.json' // provide file location
+    const dataIndex = {"Ödeshög":0,"Åtvidaberg":1,"Boxholm":2,"Finspång":3,"Kinda":4,"Linköping":5,"Mjölby":6,"Motala":7,"Norrköping":8,"Söderköping":9,"Vadstena":10,"Valdemarsvik":11,"Ydre":12,"Karlshamn":13,"Karlskrona":14,"Olofström":15,"Ronneby":16,"Sölvesborg":17,"Älvdalen":18,"Avesta":19,"Borlänge":20,"Falun":21,"Gagnef":22,"Hedemora":23,"Leksand":24,"Ludvika":25,"Malung":26,"Mora":27,"Orsa":28,"Rättvik":29,"Säter":30,"Smedjebacken":31,"Vansbro":32,"Bollnäs":33,"Gävle":34,"Hofors":35,"Hudiksvall":36,"Ljusdal":37,"Nordanstig":38,"Ockelbo":39,"Ovanåker":40,"Söderhamn":41,"Sandviken":42,"Gotland":43,"Falkenberg":44,"Halmstad":45,"Hylte":46,"Kungsbacka":47,"Laholm":48,"Varberg":49,"Östersund":50,"Åre":51,"Berg":52,"Bräcke":53,"Härjedalen":54,"Krokom":55,"Ragunda":56,"Strömsund":57,"Aneby":58,"Eksjö":59,"Gislaved":60,"Gnosjö":61,"Jönköping":62,"Nässjö":63,"Sävsjö":64,"Tranås":65,"Värnamo":66,"Vaggeryd":67,"Vetlanda":68,"Borgholm":69,"Emmaboda":70,"Högsby":71,"Hultsfred":72,"Kalmar":73,"Mönsterås":74,"Mörbylånga":75,"Nybro":76,"Oskarshamn":77,"Torsås":78,"Västervik":79,"Vimmerby":80,"Älmhult":81,"Alvesta":82,"Lessebo":83,"Ljungby":84,"Markaryd":85,"Tingsryd":86,"Uppvidinge":87,"Växjö":88,"Överkalix":89,"Övertorneå":90,"Älvsbyn":91,"Arjeplog":92,"Arvidsjaur":93,"Boden":94,"Gällivare":95,"Haparanda":96,"Jokkmokk":97,"Kalix":98,"Kiruna":99,"Luleå":100,"Pajala":101,"Piteå":102,"Örebro":103,"Askersund":104,"Degerfors":105,"Hällefors":106,"Hallsberg":107,"Karlskoga":108,"Kumla":109,"Laxå":110,"Lekeberg":111,"Lindesberg":112,"Ljusnarsberg":113,"Nora":114,"Eskilstuna":115,"Flen":116,"Gnesta":117,"Katrineholm":118,"Nyköping":119,"Oxelösund":120,"Strängnäs":121,"Trosa":122,"Vingåker":123,"Örkelljunga":124,"Östra Göinge":125,"Ängelholm":126,"Åstorp":127,"Båstad":128,"Bjuv":129,"Bromölla":130,"Burlöv":131,"Eslöv":132,"Hässleholm":133,"Höör":134,"Höganäs":135,"Hörby":136,"Helsingborg":137,"Kävlinge":138,"Klippan":139,"Kristianstad":140,"Landskrona":141,"Lomma":142,"Lund":143,"Malmö":144,"Osby":145,"Perstorp":146,"Simrishamn":147,"Sjöbo":148,"Skurup":149,"Staffanstorp":150,"Svalöv":151,"Svedala":152,"Tomelilla":153,"Trelleborg":154,"Vellinge":155,"Ystad":156,"Österåker":157,"Botkyrka":158,"Danderyd":159,"Ekerö":160,"Haninge":161,"Huddinge":162,"Järfälla":163,"Lidingö":164,"Nacka":165,"Norrtälje":166,"Nykvarn":167,"Nynäshamn":168,"Södertälje":169,"Salem":170,"Sigtuna":171,"Sollentuna":172,"Solna":173,"Stockholm":174,"Sundbyberg":175,"Täby":176,"Tyresö":177,"Upplands-Bro":178,"Upplands-Väsby":179,"Värmdö":180,"Vallentuna":181,"Vaxholm":182,"Östhammar":183,"Älvkarleby":184,"Enköping":185,"Håbo":186,"Knivsta":187,"Tierp":188,"Uppsala":189,"Årjäng":190,"Arvika":191,"Eda":192,"Filipstad":193,"Forshaga":194,"Grums":195,"Hagfors":196,"Hammarö":197,"Karlstad":198,"Kil":199,"Kristinehamn":200,"Munkfors":201,"Säffle":202,"Storfors":203,"Sunne":204,"Torsby":205,"Åsele":206,"Bjurholm":207,"Dorotea":208,"Lycksele":209,"Malå":210,"Nordmaling":211,"Norsjö":212,"Robertsfors":213,"Skellefteå":214,"Sorsele":215,"Storuman":216,"Umeå":217,"Vännäs":218,"Vilhelmina":219,"Vindeln":220,"Örnsköldsvik":221,"Ånge":222,"Härnösand":223,"Kramfors":224,"Sollefteå":225,"Sundsvall":226,"Timrå":227,"Arboga":228,"Fagersta":229,"Hallstahammar":230,"Heby":231,"Köping":232,"Kungsör":233,"Norberg":234,"Sala":235,"Skinnskatteberg":236,"Surahammar":237,"Västerås":238,"Öckerö":239,"Åmål":240,"Ale":241,"Alingsås":242,"Bengtsfors":243,"Bollebygd":244,"Borås":245,"Dals-Ed":246,"Essunga":247,"Färgelanda":248,"Falköping":249,"Göteborg":250,"Götene":251,"Grästorp":252,"Gullspång":253,"Härryda":254,"Habo":255,"Herrljunga":256,"Hjo":257,"Karlsborg":258,"Kungälv":259,"Lerum":260,"Lidköping":261,"Lilla Edet":262,"Lysekil":263,"Mölndal":264,"Mariestad":265,"Mark":266,"Mellerud":267,"Mullsjö":268,"Munkedal":269,"Orust":270,"Partille":271,"Skövde":272,"Skara":273,"Sotenäs":274,"Stenungsund":275,"Strömstad":276,"Svenljunga":277,"Töreboda":278,"Tanum":279,"Tibro":280,"Tidaholm":281,"Tjörn":282,"Tranemo":283,"Trollhättan":284,"Uddevalla":285,"Ulricehamn":286,"Vänersborg":287,"Vårgårda":288,"Vara":289}
+    //const dataIndex = {"Ödeshög":0,"Åtvidaberg":5,"Boxholm":10,"Finspång":15,"Kinda":20,"Linköping":25,"Mjölby":30,"Motala":35,"Norrköping":40,"Söderköping":45,"Vadstena":50,"Valdemarsvik":55,"Ydre":60,"Karlshamn":65,"Karlskrona":70,"Olofström":75,"Ronneby":80,"Sölvesborg":85,"Älvdalen":90,"Avesta":95,"Borlänge":100,"Falun":105,"Gagnef":110,"Hedemora":115,"Leksand":120,"Ludvika":125,"Malung":130,"Mora":135,"Orsa":140,"Rättvik":145,"Säter":150,"Smedjebacken":155,"Vansbro":160,"Bollnäs":165,"Gävle":170,"Hofors":175,"Hudiksvall":180,"Ljusdal":185,"Nordanstig":190,"Ockelbo":195,"Ovanåker":200,"Söderhamn":205,"Sandviken":210,"Gotland":215,"Falkenberg":220,"Halmstad":225,"Hylte":230,"Kungsbacka":235,"Laholm":240,"Varberg":245,"Östersund":250,"Åre":255,"Berg":260,"Bräcke":265,"Härjedalen":270,"Krokom":275,"Ragunda":280,"Strömsund":285,"Aneby":290,"Eksjö":295,"Gislaved":300,"Gnosjö":305,"Jönköping":310,"Nässjö":315,"Sävsjö":320,"Tranås":325,"Värnamo":330,"Vaggeryd":335,"Vetlanda":340,"Borgholm":345,"Emmaboda":350,"Högsby":355,"Hultsfred":360,"Kalmar":365,"Mönsterås":370,"Mörbylånga":375,"Nybro":380,"Oskarshamn":385,"Torsås":390,"Västervik":395,"Vimmerby":400,"Älmhult":405,"Alvesta":410,"Lessebo":415,"Ljungby":420,"Markaryd":425,"Tingsryd":430,"Uppvidinge":435,"Växjö":440,"Överkalix":445,"Övertorneå":450,"Älvsbyn":455,"Arjeplog":460,"Arvidsjaur":465,"Boden":470,"Gällivare":475,"Haparanda":480,"Jokkmokk":485,"Kalix":490,"Kiruna":495,"Luleå":500,"Pajala":505,"Piteå":510,"Örebro":515,"Askersund":520,"Degerfors":525,"Hällefors":530,"Hallsberg":535,"Karlskoga":540,"Kumla":545,"Laxå":550,"Lekeberg":555,"Lindesberg":560,"Ljusnarsberg":565,"Nora":570,"Eskilstuna":575,"Flen":580,"Gnesta":585,"Katrineholm":590,"Nyköping":595,"Oxelösund":600,"Strängnäs":605,"Trosa":610,"Vingåker":615,"Örkelljunga":620,"Östra Göinge":625,"Ängelholm":630,"Åstorp":635,"Båstad":640,"Bjuv":645,"Bromölla":650,"Burlöv":655,"Eslöv":660,"Hässleholm":665,"Höör":670,"Höganäs":675,"Hörby":680,"Helsingborg":685,"Kävlinge":690,"Klippan":695,"Kristianstad":700,"Landskrona":705,"Lomma":710,"Lund":715,"Malmö":720,"Osby":725,"Perstorp":730,"Simrishamn":735,"Sjöbo":740,"Skurup":745,"Staffanstorp":750,"Svalöv":755,"Svedala":760,"Tomelilla":765,"Trelleborg":770,"Vellinge":775,"Ystad":780,"Österåker":785,"Botkyrka":790,"Danderyd":795,"Ekerö":800,"Haninge":805,"Huddinge":810,"Järfälla":815,"Lidingö":820,"Nacka":825,"Norrtälje":830,"Nykvarn":835,"Nynäshamn":840,"Södertälje":845,"Salem":850,"Sigtuna":855,"Sollentuna":860,"Solna":865,"Stockholm":870,"Sundbyberg":875,"Täby":880,"Tyresö":885,"Upplands-Bro":890,"Upplands-Väsby":895,"Värmdö":900,"Vallentuna":905,"Vaxholm":910,"Östhammar":915,"Älvkarleby":920,"Enköping":925,"Håbo":930,"Knivsta":935,"Tierp":940,"Uppsala":945,"Årjäng":950,"Arvika":955,"Eda":960,"Filipstad":965,"Forshaga":970,"Grums":975,"Hagfors":980,"Hammarö":985,"Karlstad":990,"Kil":995,"Kristinehamn":1000,"Munkfors":1005,"Säffle":1010,"Storfors":1015,"Sunne":1020,"Torsby":1025,"Åsele":1030,"Bjurholm":1035,"Dorotea":1040,"Lycksele":1045,"Malå":1050,"Nordmaling":1055,"Norsjö":1060,"Robertsfors":1065,"Skellefteå":1070,"Sorsele":1075,"Storuman":1080,"Umeå":1085,"Vännäs":1090,"Vilhelmina":1095,"Vindeln":1100,"Örnsköldsvik":1105,"Ånge":1110,"Härnösand":1115,"Kramfors":1120,"Sollefteå":1125,"Sundsvall":1130,"Timrå":1135,"Arboga":1140,"Fagersta":1145,"Hallstahammar":1150,"Heby":1155,"Köping":1160,"Kungsör":1165,"Norberg":1170,"Sala":1175,"Skinnskatteberg":1180,"Surahammar":1185,"Västerås":1190,"Öckerö":1195,"Åmål":1200,"Ale":1205,"Alingsås":1210,"Bengtsfors":1215,"Bollebygd":1220,"Borås":1225,"Dals-Ed":1230,"Essunga":1235,"Färgelanda":1240,"Falköping":1245,"Göteborg":1250,"Götene":1255,"Grästorp":1260,"Gullspång":1265,"Härryda":1270,"Habo":1275,"Herrljunga":1280,"Hjo":1285,"Karlsborg":1290,"Kungälv":1295,"Lerum":1300,"Lidköping":1305,"Lilla Edet":1310,"Lysekil":1315,"Mölndal":1320,"Mariestad":1325,"Mark":1330,"Mellerud":1335,"Mullsjö":1340,"Munkedal":1345,"Orust":1350,"Partille":1355,"Skövde":1360,"Skara":1365,"Sotenäs":1370,"Stenungsund":1375,"Strömstad":1380,"Svenljunga":1385,"Töreboda":1390,"Tanum":1395,"Tibro":1400,"Tidaholm":1405,"Tjörn":1410,"Tranemo":1415,"Trollhättan":1420,"Uddevalla":1425,"Ulricehamn":1430,"Vänersborg":1435,"Vårgårda":1440,"Vara":1445}
+    // const domainRange = [0, 1445] //  (min, max)
+    let domainRange = Object.entries(dataIndex).map(
+        function (element, index) {
+            return element[1]
+        }
+    )
+    domainRange = selectDivisionNumber(domainRange)
+    const colorScale = d3.scaleLinear()
+        .domain(domainRange)
+        //I goofed, so this has to be in reverse order
+        .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+    /*
+    uStates.draw = function(id, data, toolTip){
+        function mouseOver(d){
+            d3.select("#tooltip").transition().duration(200).style("opacity", .9);
+
+            d3.select("#tooltip").html(toolTip(d.n, data[d.id]))
+                .style("left", (d3.event.pageX) + "px")
+                .style("top", (d3.event.pageY - 28) + "px");
+        }
+
+        function mouseOut(){
+            d3.select("#tooltip").transition().duration(500).style("opacity", 0);
+        }
+
+        d3.select(id).selectAll(".state")
+            .data(uStatePaths).enter().append("path").attr("class","state").attr("d",function(d){ return d.d;})
+            .style("fill",function(d){ return data[d.id].color; })
+            .on("mouseover", mouseOver).on("mouseout", mouseOut);
+    }
+     */
+    // ------------
+    function tooltipHtml(n, d){	/* function to create html content string in tooltip div. */
+        return "<h4>"+n+"</h4><table>"+
+            "<tr><td>Low</td><td>"+(d.low)+"</td></tr>"+
+            "<tr><td>Average</td><td>"+(d.avg)+"</td></tr>"+
+            "<tr><td>High</td><td>"+(d.high)+"</td></tr>"+
+            "</table>";
+    }
+
+    function download(content, fileName, contentType) {
+        var a = document.createElement("a");
+        var file = new Blob([content], {type: contentType});
+        a.href = URL.createObjectURL(file);
+        a.download = fileName;
+        a.click();
+    }
+
+    const width = 900
+    const height = 600
+
+    const svg = d3.select('body').append('svg').attr('width', width).attr('height', height)
+    // const projection = d3.geoMercator().scale(140).translate([width / 2, height / 2]);
+    // const path = d3.geoPath(projection);
+
+    const g = svg.append('g');
+    const url1 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/sweden-counties.geojson"
+    const url2 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/svenska_kommuner.geojson"
+
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+    // d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
+    // d3.json('https://raw.githubusercontent.com/codeforgermany/click_that_hood/master/public/data/sweden-counties.geojson',
+    d3.json(url2,
+        function (error, data) {
+            // https://stackoverflow.com/questions/14492284/center-a-map-in-d3-given-a-geojson-object
+            // create a first guess for the projection
+            const center = d3.geoCentroid(data);
+            let scale  = 1145;
+            let offset = [width/2, height/2];
+            let projection = d3.geoMercator()
+                .scale(scale)
+                .center(center)
+                .translate(offset);
+
+            // create the path
+            let path = d3.geoPath(projection);
+
+            // using the path determine the bounds of the current map and use
+            // these to determine better values for the scale and translation
+            const bounds = path.bounds(data);
+            const hscale = scale * width / (bounds[1][0] - bounds[0][0]);
+            const vscale = scale * height / (bounds[1][1] - bounds[0][1]);
+            scale = (hscale < vscale) ? hscale : vscale;
+            offset = [width - (bounds[0][0] + bounds[1][0]) / 2,
+                height - (bounds[0][1] + bounds[1][1]) / 2];
+
+            // new projection
+            projection = d3.geoMercator()
+                .center(center)
+                .scale(scale)
+                .translate(offset);
+            path = path.projection(projection);
+
+            console.log('ok------>')
+            console.log(data)
+            console.log()
+            console.log(data.features)
+            // const countries = topojson.feature(data, data.objects.countries);
+            // properties.NAME_2
+            /*
+            console.log('Kommuner')
+            const municipalities = []
+            const municipalityJson = {}
+            data.features.forEach(
+                function (element, index) {
+                    console.log("Kommun=", element.properties.NAME_2)
+                    municipalities.push(element.properties.NAME_2)
+                    municipalityJson[element.properties.NAME_2] = index * 3
+                }
+            )
+            // var jsonData = JSON.stringify(municipalityJson);
+            // download(jsonData, 'municipalityJson.json', 'application/json');
+            console.log('List of municipalities:')
+            console.log(municipalities)
+            console.log(municipalityJson)
+             */
+            console.log('dataMunicipality=')
+            // console.log(municipalityJson)
+            console.log('**************************************')
+            g.selectAll('path').data(data.features).enter()
+                .append('path')
+                .attr('class', 'ben')
+                .attr('d', path)
+                .attr('class', 'state')
+                .style("fill",
+                    function(d)
+                    {
+                        // return data[d.id].color;
+                        // console.log('Data-->', d)
+                        // console.log('-> ', dataIndex[d.properties.NAME_2])
+                        // console.log()
+                        // return "#FFE500";
+                        let uRate = dataIndex[d.properties.NAME_2]
+                        return colorScale(uRate)
+                    })
+                .on("mouseover",
+                    function (d) {
+                        d3.select(this)
+                            .style("fill", tinycolor(colorScale(dataIndex[d.properties.NAME_2])).darken(15).toString())
+                            //.style("fill", "#e3929b")
+                            .style("cursor", "pointer");})
+                .on("mouseout", function (d, i) {
+                    d3.select(this).style("fill",
+                        function () {
+                            let uRate = dataIndex[d.properties.NAME_2];
+                            return colorScale(uRate)
+                        });
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on('mousemove', function (d) {
+                    let municipality = d.properties.NAME_2
+                    let uRate = dataIndex[municipality]
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    //Any time the mouse moves, the tooltip should be at the same position
+                    tooltip.style("left", (d3.event.pageX) + "px")
+                        .style("top", (d3.event.pageY) + "px")
+                        //The text inside should be State: rate%'
+                        .text(()=> `${municipality}: ${uRate}%`)
+                });
+
+            // LEgend
+            //create a new SVG in the body
+            const legend = d3.select("body").append('svg')
+                //add it with the '.legend' class
+                .attr('class', 'legend')
+                //it should be 14px wide
+                .attr('width', 148)
+                //and 148px high
+                .attr('height', 148)
+                //then either select all the 'g's inside the svg
+                //or create placeholders
+                .selectAll('g')
+                //Fill the data into our placeholders in reverse order
+                //This arranges our legend in descending order.
+                //The 'data' here is the items we entered in the 'domain',
+                //in this case [min, max]
+                .data(colorScale.domain().slice().reverse())
+                //Every node in teh data should have a 'g' appended
+                .enter().append('g')
+                //the 'g' should have this attribute
+                .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; });
+            //Inside every 'legend', insert a rect
+            legend.append("rect")
+                //that's 18px wide
+                .attr("width", 18)
+                //and 18px high
+                .attr("height", 18)
+                //then fill it will the color assigned by the scale
+                .style("fill", colorScale);
+
+            legend.append("text")
+                .attr("x", 24)
+                .attr("y", 9)
+                .attr("dy", ".35em")
+                .text(function(d) {
+                    // return `${(d*100).round(2).toFixed(1)}%`
+                    console.log('d----------->')
+                    console.log(d)
+                    return d
+                });
+        });
+</script>
+
+</body>
+</html>
