@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.5.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Chivo:300|Overpass:300" rel="stylesheet">
+    <script src="https://d3js.org/queue.v1.min.js"></script>
+    <style>
+
+        .states {
+            fill: #ccc;
+            stroke: #fff;
+        }
+        .slidecontainer {
+            width: 100%;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 65%;
+            height: 25px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .slider:hover {
+            opacity: 1;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #838383;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            background: #838383;
+            cursor: pointer;
+        }
+
+        .circle {
+            fill: steelblue;
+            fill-opacity: .6;
+            stroke-width:0.5;
+            stroke: #fff;
+        }
+
+        .circle:hover {
+            stroke: #000;
+            fill:orange;
+        }
+
+        div.tooltip {
+            position: absolute;
+            text-align: center;
+            width: 100px;
+            height: 30px;
+            padding: 2px;
+            font: 12px Chivo;
+            background: white;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        .legend circle {
+            fill: none;
+            stroke: #ccc;
+        }
+
+        .legend text {
+            fill: #777;
+            font: 10px sans-serif;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+<body>
+
+<div class="slidecontainer">
+
+    <input type="range" min="1912" max="2016" step="1" value="1912" class="slider" id="slider">
+    <br>
+    <p>
+        <span style="font-family: Chivo; "></span> Year: <span id="demo"></span>
+    </p>
+</div>
+
+<script type="text/javascript">
+    var slider = document.getElementById("slider");
+    var output = document.getElementById("demo");
+    output.innerHTML = slider.value;
+
+    slider.oninput = function() {
+        output.innerHTML = this.value;
+    }
+
+    var width = 960,
+        height = 500;
+
+    var projection = d3.geoAlbersUsa();
+    var path = d3.geoPath()
+        .projection(projection);
+
+    var svg = d3.select("body").append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    var legendData = [{"size":2.5, "value":1}, {"size":2.5+(100/5), "value":100}, {"size":2.5+(200/5), "value":200}, {"size":2.5+(300/5), "value":300}];
+
+    var legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", "translate(" + (width - 70) + "," + (height - 20) + ")")
+        .selectAll("g")
+        .data(legendData)
+        .enter().append("g");
+
+    legend.append("circle")
+        .attr("cy", function(d){return -d.size})
+        .attr("r", function(d){return +d.size});
+
+    legend.append("text")
+        .attr("y", function(d){return -2*+d.size-4})
+        .attr("dy", "1.3em")
+        .text(function(d) {return d.value});
+
+    // const url1 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/us-albers.json"
+    const url1 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/us-map.geojson"
+    const url2 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/skyscrapers.csv"
+    d3.queue()
+        .defer(d3.json, url1)
+        .defer(d3.csv, url2)
+        .await(makeMyMap);
+
+    function makeMyMap(error, us, skyscrapers){
+
+        var newData = processData(1912);
+        console.log('newData')
+        console.log(newData)
+
+        svg.append("path")
+            .attr("class", "states")
+            .data(us.features)
+            .attr("d", path);
+
+        var div = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        //var circles = svg.selectAll("circles")
+        svg.selectAll("points")
+            .data(d3.keys(newData)).enter()
+            .append("circle")
+            .attr("class", "circle")
+            .attr("id", "points")
+            .attr("cx", function (d) {
+                console.log('Coord !!')
+                console.log(newData[d])
+                console.log(newData[d].coord)
+                console.log(projection(newData[d].coord))
+                console.log('Coord !!')
+                console.log('Nulll is ? !!')
+                console.log(projection(newData[d].coord) === null )
+                console.log('Coord !!')
+                return projection(newData[d].coord) === null ? -75.911407470703 : projection(newData[d].coord)[0];
+            })
+            .attr("cy", function (d) {
+                return projection(newData[d].coord) === null ? 42.096168518066 : projection(newData[d].coord)[1];
+            })
+            .attr("r", function(d){
+                if (newData[d].count === 1){
+                    return "2.5px";
+                }else if (newData[d].count === 0){
+                    return "0px";
+                }
+                else{
+                    var n = 2.5 + (+newData[d].count)/5;
+                    return n.toString();
+                }
+            })
+            .on("mouseover", function(d) {
+                // var xpos = projection(newData[d].coord)[0];
+                // var ypos = projection(newData[d].coord)[1];
+
+                var information = "<b>" + d + "</b><br>" + newData[d].count;
+
+                div.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                div.html(information)
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY) + "px");
+            })
+            .on("mouseout", function(d) {
+                div.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        function processData(year){
+            var newData = {};
+            skyscrapers.forEach(function(d) {
+                // console.log('skyscrapers.d')
+                // console.log(d)
+                // console.log('>>>>>>>>>> skyscrapers <<<<<<<<<<<<<<')
+                if (!(d.city in newData)){
+                    if(+d["completed.year"] <= +year){
+                        newData[d.city] = {count:1, coord:[+d.longitude, +d.latitude]};
+                    }
+                    else{
+                        newData[d.city] = {count:0, coord:[+d.longitude, +d.latitude]};
+                    }
+                }
+                else if(d.city in newData && +d["completed.year"] <= +year){
+                    newData[d.city].count = newData[d.city].count + 1;
+                }
+            })
+            return newData;
+        }
+
+        d3.select("input")
+            .on("change", function() {
+                var yearInput = +d3.select(this).node().value;
+                newData = processData(yearInput);
+
+                svg.selectAll("#points")
+                    .data(d3.keys(newData))
+                    .transition()
+                    .duration(500)
+                    .attr("cx", function (d) { return projection(newData[d].coord)[0]; })
+                    .attr("cy", function (d) { return projection(newData[d].coord)[1]; })
+                    .attr("r", function(d){
+                        if (newData[d].count === 1){
+                            return "2.5px";
+                        }else if (newData[d].count === 0){
+                            return "0px";
+                        }
+                        else{
+                            var n = 2.5 + (+newData[d].count)/5;
+                            return n.toString();
+                        }
+
+                    });
+            });
+    }
+
+</script>
+
+</body>
+</html>

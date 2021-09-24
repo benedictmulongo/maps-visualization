@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.5.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
+    <style>
+        /*
+        svg {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .country {
+            fill: #ccc;
+            stroke: #999;
+        }
+         */
+        .state {
+            stroke-width: 0.5;
+            stroke: #000000;
+        }
+        .state:hover {
+            fill: #92a5e3;
+            cursor: pointer;
+        }
+        div.tooltip {
+            position: absolute;
+            text-align: center;
+            width: 60px;
+            min-height: 28px;
+            padding: 8px 12px;
+            font: 12px sans-serif;
+            background: lightgray;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .slider {
+            width: 65%;
+            height: 25px;
+            background: #d3d3d3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="slidecontainer">
+
+    <input type="range" min="1912" max="2016" step="1" value="1912" class="slider" id="slider">
+    <br>
+    <p>
+        <span style="font-family: Chivo; "></span> Year: <span id="demo"></span>
+    </p>
+</div>
+
+<script type="text/javascript">
+    var slider = document.getElementById("slider");
+    var output = document.getElementById("demo");
+    output.innerHTML = slider.value;
+
+    slider.oninput = function() {
+        output.innerHTML = this.value;
+    }
+
+    const width = 900
+    const height = 600
+    const svg = d3.select('body').append('svg').attr('width', width).attr('height', height)
+
+    const g = svg.append('g');
+
+    let myData = [40, 10, 20, 60, 30];
+
+    function update(data) {
+        d3.select('.chart')
+            .selectAll('circle')
+            .data(data)
+            .join('circle')
+            .attr('cx', function(d, i) {
+                return i * 100;
+            })
+            .attr('cy', 50)
+            .attr('r', function(d) {
+                return 0.5 * d;
+            })
+            .style('fill', function(d) {
+                return d > 30 ? 'orange' : '#eee';
+            });
+    }
+
+    update(myData);
+
+
+</script>
+
+</body>
+</html>
