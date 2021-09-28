@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.5.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
+    <style>
+        .state {
+            stroke-width: 0.5;
+            stroke: #000000;
+        }
+        .state:hover {
+            fill: #92a5e3;
+            cursor: pointer;
+        }
+        .slider {
+            width: 65%;
+            height: 25px;
+            background: #d3d3d3;
+        }
+
+        .tooltip {
+            position: absolute;
+            width: 200px;
+            height: 60px;
+            padding: 8px;
+            background: rgb(255,255,255);
+            font-family: "Helvetica Neue", "Helvetica", Arial sans-serif;
+            font-size: 12px;
+            border: 1px solid rgba(0,0,0,0.2);
+            box-shadow: 0 3px 5px rgba(0,0,0,0.5),0 0 0 1px rgba(0,0,0,.08);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        .g-place {
+            border-bottom: 1px solid rgb(130,130,130);
+            padding-bottom: 3px;
+            margin-bottom: 5px;
+        }
+        .g-headline {
+            font-size: 16px;
+        }
+        .g-sub {
+            color: rgb(130,130,130);
+        }
+        .g-value {
+            float: right;
+        }
+        .arrow-right {
+            position: absolute;
+            width: 0px;
+            height: 0px;
+            border-top: 10px solid transparent;
+            border-bottom: 10px solid transparent;
+            border-left: 10px solid green;
+        }
+    </style>
+</head>
+<body>
+
+<div class="slidecontainer">
+
+    <input type="range" min="2020" max="2021" step="1" value="2020" class="slider" id="slider">
+    <br>
+    <p>
+        <span style="font-family: Chivo; "></span> Year: <span id="demo"></span>
+    </p>
+</div>
+
+<div id="municipalityTableData"> </div>
+<script type="text/javascript">
+    // ---------------------------- WATCH INPUT CHANGES ----------------------------------------------------
+    var slider = document.getElementById("slider");
+    var output = document.getElementById("demo");
+    output.innerHTML = slider.value;
+
+    slider.oninput = function() {
+        output.innerHTML = this.value;
+    }
+    // ---------------------------- END OF WATCH INPUT CHANGES --------------------------------------------
+
+    // ---------------------------- FUNCTIONS ----------------------------------------------------
+    const mathRound = (numb, precision = 2) => {
+        const decimal = Math.pow(10, precision)
+        return Math.round((numb + Number.EPSILON) * decimal) / decimal
+    }
+    const scaleToNewMinMax = (value, min, max, new_min = 0, new_max = 8) => {
+        const xStd = (value - min) / (max - min)
+        const xScaled = xStd * (new_max - new_min) + new_min
+        return mathRound(xScaled, 0)
+        // return xScaled
+    }
+    const scaleToNewMinMaxContinuous = (value, min, max, new_min = 0, new_max = 8) => {
+        const xStd = (value - min) / (max - min)
+        const xScaled = xStd * (new_max - new_min) + new_min
+        // return mathRound(xScaled, 0)
+        return xScaled
+    }
+    function getOffset(el) {
+        const rect = el.getBoundingClientRect();
+        return {
+            left: rect.left + window.scrollX,
+            top: rect.top + window.scrollY
+        };
+    }
+    function selectDivisionNumber(array) {
+        let arraySize = array.length,
+            halfArray = Math.round(arraySize / 2);
+        let newArr = [];
+        //Take first and last item and push them to the array
+        newArr.push(array[0])
+        newArr.push(array[arraySize - 1]);
+        //Don't mind the order, they will be sorted later.
+        //Divide the array in two
+        let firstHalf = array.slice(0, halfArray);
+        let firstHalfSelection = firstHalf[Math.round(firstHalf.length / 2)];
+        newArr.push(firstHalfSelection);
+
+        let secondHalf = array.slice(halfArray, arraySize);
+        let secondHalfSelection = secondHalf[Math.round(secondHalf.length / 2)];
+        newArr.push(secondHalfSelection);
+        return newArr;
+    }
+    function getMaxMinData(dataDrugs, year, drugType) {
+        let maxDrugValue = 0
+        let minDrugValue = Number.MAX_SAFE_INTEGER
+        const drugValues = []
+        for (const [key, value] of Object.entries(dataDrugs)) {
+            const len = Object.keys(value).length
+            if(len > 0 && (value[year] !== undefined) ){
+                // console.log(value[year]['metadata']['drugtype'])
+                // console.log('rowCount=', value[year]['metadata']['rowCount'])
+                // console.log(`${key}: ${value[year]['metadata']['drugtype'][drugType]}`);
+                const drugVal = value[year]['metadata']['drugtype'][drugType]
+                const rowCount = value[year]['metadata']['rowCount']
+                const avgDrugValue = drugVal / rowCount
+                // console.log('avgDrugValue=',avgDrugValue)
+                if(minDrugValue > avgDrugValue) {
+                    minDrugValue = avgDrugValue
+                }
+                if(maxDrugValue < avgDrugValue) {
+                    maxDrugValue = avgDrugValue
+                }
+                drugValues.push(avgDrugValue)
+            }
+        }
+
+        return {
+            maxDrugValue,
+            minDrugValue,
+            drugValues
+        }
+    }
+    function getColorFromRGB (rgbColor) {
+        let R, G, B
+        if(rgbColor.includes('rgba')) {
+            const rgbArr = rgbColor.substring(5, rgbColor.length-1).replace(/ /g, '').split(',');
+            R = parseFloat(rgbArr[0])
+            G = parseFloat(rgbArr[1])
+            B = parseFloat(rgbArr[2])
+        } else {
+            const rgbArr = rgbColor.substring(4, rgbColor.length-1).replace(/ /g, '').split(',');
+            R = parseFloat(rgbArr[0])
+            G = parseFloat(rgbArr[1])
+            B = parseFloat(rgbArr[2])
+        }
+        return {R,G,B}
+    }
+    function getDistance (x, y) {
+        const dist = Math.pow(x[0] - y[0], 2) + Math.pow(x[1] - y[1], 2) + Math.pow(x[1] - y[1], 2)
+        return Math.sqrt(dist)
+    }
+    function getDistanceRGB (x, y) {
+        const dist = Math.pow(x.R - y.R, 2) + Math.pow(x.G - y.G, 2) + Math.pow(x.B - y.B, 2)
+        return Math.sqrt(dist)
+    }
+    function getLegendInterval(colorScale, numberOfLegendElement, legendLength) {
+        // const legendLength = 9*20
+        let dif = colorScale.domain()[1] - colorScale.domain()[0];
+        let intervals = d3.range(numberOfLegendElement - 1).map(function(d,i) {
+            return dif * i / (numberOfLegendElement - 1) + colorScale.domain()[0]
+        })
+        intervals.push(colorScale.domain()[1]);
+        let intervalHeight = legendLength / intervals.length;
+
+        let legendColorSpace = intervals.map(function (e, index) {
+            return colorScale(e)
+        })
+        return {
+            intervals,
+            intervalHeight,
+            legendColorSpace
+        }
+    }
+    // ---------------------------- END OF FUNCTIONS ------------------------------------------------------
+
+    // ---------------------------- START INITIALIZATION FUNCTIONS --------------------------------------------
+    const width = 900
+    const height = 600
+    const svg = d3.select('body').append('svg')
+        .attr('width', width)
+        .attr('height', height)
+    // .call(d3.zoom().on("zoom", function () {svg.attr("transform", d3.event.transform)}))
+
+    const dataIndex = {"Ödeshög":0,"Åtvidaberg":1,"Boxholm":2,"Finspång":3,"Kinda":4,"Linköping":5,"Mjölby":6,"Motala":7,"Norrköping":8,"Söderköping":9,"Vadstena":10,"Valdemarsvik":11,"Ydre":12,"Karlshamn":13,"Karlskrona":14,"Olofström":15,"Ronneby":16,"Sölvesborg":17,"Älvdalen":18,"Avesta":19,"Borlänge":20,"Falun":21,"Gagnef":22,"Hedemora":23,"Leksand":24,"Ludvika":25,"Malung":26,"Mora":27,"Orsa":28,"Rättvik":29,"Säter":30,"Smedjebacken":31,"Vansbro":32,"Bollnäs":33,"Gävle":34,"Hofors":35,"Hudiksvall":36,"Ljusdal":37,"Nordanstig":38,"Ockelbo":39,"Ovanåker":40,"Söderhamn":41,"Sandviken":42,"Gotland":43,"Falkenberg":44,"Halmstad":45,"Hylte":46,"Kungsbacka":47,"Laholm":48,"Varberg":49,"Östersund":50,"Åre":51,"Berg":52,"Bräcke":53,"Härjedalen":54,"Krokom":55,"Ragunda":56,"Strömsund":57,"Aneby":58,"Eksjö":59,"Gislaved":60,"Gnosjö":61,"Jönköping":62,"Nässjö":63,"Sävsjö":64,"Tranås":65,"Värnamo":66,"Vaggeryd":67,"Vetlanda":68,"Borgholm":69,"Emmaboda":70,"Högsby":71,"Hultsfred":72,"Kalmar":73,"Mönsterås":74,"Mörbylånga":75,"Nybro":76,"Oskarshamn":77,"Torsås":78,"Västervik":79,"Vimmerby":80,"Älmhult":81,"Alvesta":82,"Lessebo":83,"Ljungby":84,"Markaryd":85,"Tingsryd":86,"Uppvidinge":87,"Växjö":88,"Överkalix":89,"Övertorneå":90,"Älvsbyn":91,"Arjeplog":92,"Arvidsjaur":93,"Boden":94,"Gällivare":95,"Haparanda":96,"Jokkmokk":97,"Kalix":98,"Kiruna":99,"Luleå":100,"Pajala":101,"Piteå":102,"Örebro":103,"Askersund":104,"Degerfors":105,"Hällefors":106,"Hallsberg":107,"Karlskoga":108,"Kumla":109,"Laxå":110,"Lekeberg":111,"Lindesberg":112,"Ljusnarsberg":113,"Nora":114,"Eskilstuna":115,"Flen":116,"Gnesta":117,"Katrineholm":118,"Nyköping":119,"Oxelösund":120,"Strängnäs":121,"Trosa":122,"Vingåker":123,"Örkelljunga":124,"Östra Göinge":125,"Ängelholm":126,"Åstorp":127,"Båstad":128,"Bjuv":129,"Bromölla":130,"Burlöv":131,"Eslöv":132,"Hässleholm":133,"Höör":134,"Höganäs":135,"Hörby":136,"Helsingborg":137,"Kävlinge":138,"Klippan":139,"Kristianstad":140,"Landskrona":141,"Lomma":142,"Lund":143,"Malmö":144,"Osby":145,"Perstorp":146,"Simrishamn":147,"Sjöbo":148,"Skurup":149,"Staffanstorp":150,"Svalöv":151,"Svedala":152,"Tomelilla":153,"Trelleborg":154,"Vellinge":155,"Ystad":156,"Österåker":157,"Botkyrka":158,"Danderyd":159,"Ekerö":160,"Haninge":161,"Huddinge":162,"Järfälla":163,"Lidingö":164,"Nacka":165,"Norrtälje":166,"Nykvarn":167,"Nynäshamn":168,"Södertälje":169,"Salem":170,"Sigtuna":171,"Sollentuna":172,"Solna":173,"Stockholm":174,"Sundbyberg":175,"Täby":176,"Tyresö":177,"Upplands-Bro":178,"Upplands-Väsby":179,"Värmdö":180,"Vallentuna":181,"Vaxholm":182,"Östhammar":183,"Älvkarleby":184,"Enköping":185,"Håbo":186,"Knivsta":187,"Tierp":188,"Uppsala":189,"Årjäng":190,"Arvika":191,"Eda":192,"Filipstad":193,"Forshaga":194,"Grums":195,"Hagfors":196,"Hammarö":197,"Karlstad":198,"Kil":199,"Kristinehamn":200,"Munkfors":201,"Säffle":202,"Storfors":203,"Sunne":204,"Torsby":205,"Åsele":206,"Bjurholm":207,"Dorotea":208,"Lycksele":209,"Malå":210,"Nordmaling":211,"Norsjö":212,"Robertsfors":213,"Skellefteå":214,"Sorsele":215,"Storuman":216,"Umeå":217,"Vännäs":218,"Vilhelmina":219,"Vindeln":220,"Örnsköldsvik":221,"Ånge":222,"Härnösand":223,"Kramfors":224,"Sollefteå":225,"Sundsvall":226,"Timrå":227,"Arboga":228,"Fagersta":229,"Hallstahammar":230,"Heby":231,"Köping":232,"Kungsör":233,"Norberg":234,"Sala":235,"Skinnskatteberg":236,"Surahammar":237,"Västerås":238,"Öckerö":239,"Åmål":240,"Ale":241,"Alingsås":242,"Bengtsfors":243,"Bollebygd":244,"Borås":245,"Dals-Ed":246,"Essunga":247,"Färgelanda":248,"Falköping":249,"Göteborg":250,"Götene":251,"Grästorp":252,"Gullspång":253,"Härryda":254,"Habo":255,"Herrljunga":256,"Hjo":257,"Karlsborg":258,"Kungälv":259,"Lerum":260,"Lidköping":261,"Lilla Edet":262,"Lysekil":263,"Mölndal":264,"Mariestad":265,"Mark":266,"Mellerud":267,"Mullsjö":268,"Munkedal":269,"Orust":270,"Partille":271,"Skövde":272,"Skara":273,"Sotenäs":274,"Stenungsund":275,"Strömstad":276,"Svenljunga":277,"Töreboda":278,"Tanum":279,"Tibro":280,"Tidaholm":281,"Tjörn":282,"Tranemo":283,"Trollhättan":284,"Uddevalla":285,"Ulricehamn":286,"Vänersborg":287,"Vårgårda":288,"Vara":289}
+    const dataIndexInteractive = {"Ödeshög":9,"Åtvidaberg":5,"Boxholm":39,"Finspång":35,"Kinda":29,"Linköping":25,"Mjölby":39,"Motala":35,"Norrköping":49,"Söderköping":45,"Vadstena":59,"Valdemarsvik":55,"Ydre":69,"Karlshamn":65,"Karlskrona":39,"Olofström":35,"Ronneby":59,"Sölvesborg":55,"Älvdalen":99,"Avesta":95,"Borlänge":399,"Falun":395,"Gagnef":339,"Hedemora":335,"Leksand":329,"Ludvika":325,"Malung":339,"Mora":335,"Orsa":349,"Rättvik":345,"Säter":359,"Smedjebacken":355,"Vansbro":369,"Bollnäs":365,"Gävle":339,"Hofors":335,"Hudiksvall":359,"Ljusdal":355,"Nordanstig":399,"Ockelbo":395,"Ovanåker":299,"Söderhamn":295,"Sandviken":239,"Gotland":235,"Falkenberg":229,"Halmstad":225,"Hylte":239,"Kungsbacka":235,"Laholm":249,"Varberg":245,"Östersund":259,"Åre":255,"Berg":269,"Bräcke":265,"Härjedalen":239,"Krokom":235,"Ragunda":259,"Strömsund":255,"Aneby":299,"Eksjö":295,"Gislaved":399,"Gnosjö":395,"Jönköping":339,"Nässjö":335,"Sävsjö":329,"Tranås":325,"Värnamo":339,"Vaggeryd":335,"Vetlanda":349,"Borgholm":345,"Emmaboda":359,"Högsby":355,"Hultsfred":369,"Kalmar":365,"Mönsterås":339,"Mörbylånga":335,"Nybro":359,"Oskarshamn":355,"Torsås":399,"Västervik":395,"Vimmerby":499,"Älmhult":495,"Alvesta":439,"Lessebo":435,"Ljungby":429,"Markaryd":425,"Tingsryd":439,"Uppvidinge":435,"Växjö":449,"Överkalix":445,"Övertorneå":459,"Älvsbyn":455,"Arjeplog":469,"Arvidsjaur":465,"Boden":439,"Gällivare":435,"Haparanda":459,"Jokkmokk":455,"Kalix":499,"Kiruna":495,"Luleå":599,"Pajala":595,"Piteå":539,"Örebro":535,"Askersund":529,"Degerfors":525,"Hällefors":539,"Hallsberg":535,"Karlskoga":549,"Kumla":545,"Laxå":559,"Lekeberg":555,"Lindesberg":569,"Ljusnarsberg":565,"Nora":539,"Eskilstuna":535,"Flen":559,"Gnesta":555,"Katrineholm":599,"Nyköping":595,"Oxelösund":699,"Strängnäs":695,"Trosa":639,"Vingåker":635,"Örkelljunga":629,"Östra Göinge":625,"Ängelholm":639,"Åstorp":635,"Båstad":649,"Bjuv":645,"Bromölla":659,"Burlöv":655,"Eslöv":669,"Hässleholm":665,"Höör":639,"Höganäs":635,"Hörby":659,"Helsingborg":655,"Kävlinge":699,"Klippan":695,"Kristianstad":399,"Landskrona":395,"Lomma":339,"Lund":335,"Malmö":329,"Osby":325,"Perstorp":339,"Simrishamn":335,"Sjöbo":349,"Skurup":345,"Staffanstorp":359,"Svalöv":355,"Svedala":369,"Tomelilla":365,"Trelleborg":339,"Vellinge":335,"Ystad":359,"Österåker":355,"Botkyrka":399,"Danderyd":395,"Ekerö":599,"Haninge":595,"Huddinge":539,"Järfälla":535,"Lidingö":529,"Nacka":525,"Norrtälje":539,"Nykvarn":535,"Nynäshamn":549,"Södertälje":545,"Salem":559,"Sigtuna":555,"Sollentuna":569,"Solna":565,"Stockholm":539,"Sundbyberg":535,"Täby":559,"Tyresö":555,"Upplands-Bro":599,"Upplands-Väsby":595,"Värmdö":999,"Vallentuna":995,"Vaxholm":939,"Östhammar":935,"Älvkarleby":929,"Enköping":925,"Håbo":939,"Knivsta":935,"Tierp":949,"Uppsala":945,"Årjäng":959,"Arvika":955,"Eda":969,"Filipstad":965,"Forshaga":939,"Grums":935,"Hagfors":959,"Hammarö":955,"Karlstad":999,"Kil":995,"Kristinehamn":3999,"Munkfors":3995,"Säffle":3939,"Storfors":3935,"Sunne":3929,"Torsby":3925,"Åsele":3939,"Bjurholm":3935,"Dorotea":3949,"Lycksele":3945,"Malå":3959,"Nordmaling":3955,"Norsjö":3969,"Robertsfors":3965,"Skellefteå":3939,"Sorsele":3935,"Storuman":3959,"Umeå":3955,"Vännäs":3999,"Vilhelmina":3995,"Vindeln":3399,"Örnsköldsvik":3395,"Ånge":3339,"Härnösand":3335,"Kramfors":3329,"Sollefteå":3325,"Sundsvall":3339,"Timrå":3335,"Arboga":3349,"Fagersta":3345,"Hallstahammar":3359,"Heby":3355,"Köping":3369,"Kungsör":3365,"Norberg":3339,"Sala":3335,"Skinnskatteberg":3359,"Surahammar":3355,"Västerås":3399,"Öckerö":3395,"Åmål":3299,"Ale":3295,"Alingsås":3239,"Bengtsfors":3235,"Bollebygd":3229,"Borås":3225,"Dals-Ed":3239,"Essunga":3235,"Färgelanda":3249,"Falköping":3245,"Göteborg":3259,"Götene":3255,"Grästorp":3269,"Gullspång":3265,"Härryda":3239,"Habo":3235,"Herrljunga":3259,"Hjo":3255,"Karlsborg":3299,"Kungälv":3295,"Lerum":3399,"Lidköping":3395,"Lilla Edet":3339,"Lysekil":3335,"Mölndal":3329,"Mariestad":3325,"Mark":3339,"Mellerud":3335,"Mullsjö":3349,"Munkedal":3345,"Orust":3359,"Partille":3355,"Skövde":3369,"Skara":3365,"Sotenäs":3339,"Stenungsund":3335,"Strömstad":3359,"Svenljunga":3355,"Töreboda":3399,"Tanum":3395,"Tibro":3499,"Tidaholm":3495,"Tjörn":3439,"Tranemo":3435,"Trollhättan":3429,"Uddevalla":3425,"Ulricehamn":3439,"Vänersborg":3435,"Vårgårda":3449,"Vara":3445}
+
+    const g = svg.append('g').attr("id", "mapFigure");
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+    var legend2 = svg.append('g')
+        .attr('transform', 'translate(825, 400)')
+        .attr('id', 'legend');
+
+    const legendCursor = d3.select("body").append("div")
+        .attr('transform', 'translate(825, 400)')
+        .attr("class", "arrow-right")
+        .style("opacity", 0);
+
+    const legendNoData = svg.append('g')
+        .attr('transform', 'translate(825, 370)')
+        .selectAll('.colorbar')
+        .data(d3.range(2))
+        .enter().append('svg:rect')
+        .attr('height', '20px')
+        .attr('width', '20px').style('fill', '#bebebe');
+
+    const noDataText = svg
+        .append('text')
+        .attr('transform', 'translate(770, 385)')
+        .attr('id', 'noDataLegend')
+        .attr('fill', '#808080')
+        .attr('font-family', 'Helvetica Neue, Arial')
+        .attr('font-weight', 10)
+        .attr('font-size', 14)
+        .text('No data')
+
+    const colorScalePreDefined = d3.scaleLinear()
+        .domain([0, 289])
+        //I goofed, so this has to be in reverse order
+        .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+
+    const colorScaleThreshold = d3.scaleThreshold()
+        .domain([
+            0,
+            289
+        ])
+        .range([
+            'rgb(247,251,255)',
+            'rgb(222,235,247)',
+            'rgb(198,219,239)',
+            'rgb(158,202,225)',
+            'rgb(107,174,214)',
+            'rgb(66,146,198)',
+            'rgb(33,113,181)',
+            'rgb(8,81,156)',
+            'rgb(8,48,107)',
+            'rgb(3,19,43)'
+        ]);
+    // ---------------------------- END OF INITIALIZATION -----------------------------------------
+
+    // ---------------------------- START OF INIT  FUNCTIO  ---------------------------------------
+    function init(dataIndex, year, drugType='cocaine') {
+        const drugVal = getMaxMinData(dataDrugs, year, drugType)
+        const maxDrugValue = mathRound(drugVal.maxDrugValue, 0)
+        const minDrugValue = mathRound(drugVal.minDrugValue, 0)
+        const drugValues = drugVal.drugValues
+        const scaledDrugValues = drugValues.map(function (e, index) {
+            return scaleToNewMinMaxContinuous(e, minDrugValue, maxDrugValue)
+        })
+        console.log('MaxofDATA************: ', maxDrugValue)
+        console.log('MinofDATA------------: ', minDrugValue)
+        console.log('drugValues------------: ', drugValues)
+        console.log('scaledDrugValues------------: ', scaledDrugValues)
+        let domainRange = Object.entries(dataIndex).map(
+            function (element, index) {
+                return element[1]
+            }
+        )
+        // domainRange = selectDivisionNumber(domainRange)
+        domainRange = selectDivisionNumber(drugValues)
+        console.log('domainRange+++++++++++')
+        console.log(domainRange)
+        // const colorScale = d3.scaleSequential(d3.interpolateCool).domain([minDrugValue,maxDrugValue]);
+        // const colorScale = d3.scaleSequential(d3.interpolateCool).domain(drugValues);
+        const colorScaleLinear = d3.scaleLinear()
+            .domain(drugValues)
+            //I goofed, so this has to be in reverse order
+            .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+        // no works const colorScale = d3.scaleSequential(d3.interpolateRgb("red",'green')(0.5)).domain([0,289]);
+        const colorScale = d3.scaleSequential(d3.interpolateRgb("blue",'red')).domain(drugValues);
+        const legendInterval = getLegendInterval(colorScale, 9, 9*20)
+        console.log('----------legendInterval+++++++++++')
+        console.log(legendInterval)
+        const url1 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/sweden-counties.geojson"
+        const url2 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/svenska_kommuner.geojson"
+
+
+        d3.json(url2,
+            function (error, data) {
+                // https://stackoverflow.com/questions/14492284/center-a-map-in-d3-given-a-geojson-object
+                // create a first guess for the projection
+                const center = d3.geoCentroid(data);
+                let scale  = 1145;
+                let offset = [width/2, height/2];
+                let projection = d3.geoMercator()
+                    .scale(scale)
+                    .center(center)
+                    .translate(offset);
+
+                // create the path
+                let path = d3.geoPath(projection);
+
+                // using the path determine the bounds of the current map and use
+                // these to determine better values for the scale and translation
+                const bounds = path.bounds(data);
+                const hscale = scale * width / (bounds[1][0] - bounds[0][0]);
+                const vscale = scale * height / (bounds[1][1] - bounds[0][1]);
+                scale = (hscale < vscale) ? hscale : vscale;
+                offset = [width - (bounds[0][0] + bounds[1][0]) / 2,
+                    height - (bounds[0][1] + bounds[1][1]) / 2];
+
+                // new projection
+                projection = d3.geoMercator()
+                    .center(center)
+                    .scale(scale)
+                    .translate(offset);
+                path = path.projection(projection);
+
+                console.log('ok------>')
+                console.log(data)
+                console.log()
+                console.log(data.features)
+                console.log('dataMunicipality=')
+                // console.log(municipalityJson)
+                console.log('**************************************')
+                g.selectAll('path')
+                    .data(data.features)
+                    .enter()
+                    .append('path')
+                    .attr('class', 'ben')
+                    .attr("id", "municipalities")
+                    .attr('d', path)
+                    // TODO: Stop init()
+                    .attr('class', function (d) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        let uRate = dataIndex[municipality]
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                            const rowCount = currentData[year]['metadata']['rowCount']
+                            const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                            const legendColorSpace = legendInterval.legendColorSpace
+                            const currentMapRGBColor = colorScale(avgDrugValue)
+                            let closestColorDist = Number.MAX_SAFE_INTEGER
+                            let closestColorIndex = undefined
+                            legendColorSpace.forEach(function (e, index) {
+                                const key = getColorFromRGB(currentMapRGBColor)
+                                const compareKey = getColorFromRGB(e)
+                                const dist = getDistanceRGB(key, compareKey)
+                                if(closestColorDist > dist) {
+                                    closestColorDist = dist
+                                    closestColorIndex = index
+                                }
+                            })
+                            return 'state' + " " + 'group' + closestColorIndex
+                        } else {
+                            // Fill blank
+                            return 'state' + " " + 'groupNoData'
+                        }
+                    })
+                    .style('opacity', function (d) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        return len > 0 && (currentData[year] !== undefined) ? 1 : 0.2
+                        // if(len > 0 && (currentData[year] !== undefined)) {
+                    })
+                    .style("fill",
+                        function(d)
+                        {
+                            // return data[d.id].color;
+                            // console.log('Data-->', d)
+                            // console.log('-> ', dataIndex[d.properties.NAME_2])
+                            // console.log()
+                            // return "#FFE500";
+                            console.log(' STOP ** STOP ** STOP ** STOP ** STOP ** STOP ** ')
+                            console.log('Test colorScaleThreshold = ', colorScaleThreshold(250))
+                            const municipality = d.properties.NAME_2
+                            const currentData = dataDrugs[municipality]
+                            const len = Object.keys(currentData).length
+                            let uRate = dataIndex[municipality]
+                            console.log('Name=', municipality,', Fill=', dataDrugs[municipality])
+                            if(len > 0 && (currentData[year] !== undefined)) {
+                                const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                const rowCount = currentData[year]['metadata']['rowCount']
+                                const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                return colorScale(avgDrugValue)
+                            } else {
+                                // Fill blank
+                                return '#808080'
+                            }
+                        })
+                    .on("mouseover",
+                        function (d) {
+                            const municipality = d.properties.NAME_2
+                            const currentData = dataDrugs[municipality]
+                            const len = Object.keys(currentData).length
+                            if(len > 0 && (currentData[year] !== undefined)) {
+                                const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                const rowCount = currentData[year]['metadata']['rowCount']
+                                const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                // return colorScale(avgDrugValue)
+                                d3.select(this)
+                                    .style("fill", tinycolor(colorScale(avgDrugValue)).darken(15).toString())
+                                    //.style("fill", "#e3929b")
+                                    .style("cursor", "pointer")
+                                    .style('stroke-width', 2)
+                                    .style('stroke', '#ffffff');
+
+                                //Any time the mouse moves, the tooltip should be at the same position
+                                // translate(825, 400)
+                                const legendColorSpace = legendInterval.legendColorSpace
+                                const currentMapRGBColor = colorScale(avgDrugValue)
+                                let closestColorDist = Number.MAX_SAFE_INTEGER
+                                let closestColorIndex = undefined
+                                legendColorSpace.forEach(function (e, index) {
+                                    const key = getColorFromRGB(currentMapRGBColor)
+                                    const compareKey = getColorFromRGB(e)
+                                    const dist = getDistanceRGB(key, compareKey)
+                                    if(closestColorDist > dist) {
+                                        closestColorDist = dist
+                                        closestColorIndex = index
+                                    }
+                                })
+
+                                const currentVal = dataIndex[d.properties.NAME_2]
+                                const scaledCurrentVal = scaleToNewMinMax(avgDrugValue, minDrugValue, maxDrugValue)
+                                const legendID = 'legend' + closestColorIndex + '-9'
+                                const currentLegendSquare = document.getElementById(legendID)
+                                const offset = getOffset(currentLegendSquare)
+                                let uRate = dataIndex[d.properties.NAME_2];
+                                legendCursor.transition()
+                                    .duration(200)
+                                    .style("opacity", 1);
+                                legendCursor
+                                    .style("left", (offset.left - 11) +'px')
+                                    .style("top", offset.top + 'px')
+                                    .style('border-left', '10px solid ' + currentMapRGBColor)
+
+                            }
+                            else {
+                                // --
+                                d3.select(this)
+                                    .style("fill",
+                                        function () {
+                                            return '#a9a9a9'
+                                        })
+                                    .style("cursor", "pointer")
+                                    .style('stroke-width', 2);
+                                const legendID =  'noDataLegend'
+                                const currentLegendSquare = document.getElementById(legendID)
+                                const offset = getOffset(currentLegendSquare)
+                                legendCursor.transition()
+                                    .duration(200)
+                                    .style("opacity", 1);
+                                legendCursor
+                                    .style("left", (offset.left - 11) +'px')
+                                    .style("top", (offset.top - 2) + 'px')
+                                    .style('border-left', '10px solid #838383')
+                            }
+                        })
+                    .on("mouseout", function (d, i) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            d3.select(this)
+                                .style("fill",
+                                    function () {
+                                        let uRate = dataIndex[d.properties.NAME_2];
+                                        const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                        const rowCount = currentData[year]['metadata']['rowCount']
+                                        const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                        return colorScale(avgDrugValue)
+                                        // return colorScale(uRate)
+                                    })
+                                .style('stroke-width', 0.5)
+                                .style('stroke', '#000000');
+                        } else {
+                            // --
+                            d3.select(this)
+                                .style("fill",
+                                    function () {
+                                        return '#808080'
+                                    })
+                                .style('stroke-width', 0.5);
+                        }
+
+                        legendCursor.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                        tooltip.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                    })
+                    .on('mousemove', function (d) {
+                        tooltip.transition()
+                            .duration(200)
+                            .style("opacity", 0.9);
+                        //Any time the mouse moves, the tooltip should be at the same position
+                        tooltip.style("left", (d3.event.pageX - 110) + "px")
+                            .style("top", (d3.event.pageY - 90) + "px");
+
+                        let municipality = d.properties.NAME_2
+                        let disctrict = d.properties.NAME_1
+                        let uRate = dataIndex[municipality]
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                            const rowCount = currentData[year]['metadata']['rowCount']
+                            const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                            tooltip
+                                //The text inside should be State: rate%'
+                                //.text(()=> `${municipality}: ${uRate}%`)
+                                .html(
+                                    "<div class='g-place'>" +
+                                    "<span class='g-headline'>" +
+                                    `${municipality}` +
+                                    "</span><br />" +
+                                    "<span class='g-sub'>" +
+                                    `${disctrict}` +
+                                    "</span>" +
+                                    "</div>" +
+                                    "<span>Nivå</span>" +
+                                    "<span class='g-value'>" +
+                                    `${avgDrugValue}` +
+                                    " mg/l</span>"
+                                );
+                        } else {
+                            tooltip
+                                .html(
+                                    "<div class='g-place'>" +
+                                    "<span class='g-headline'>" +
+                                    `${municipality}` +
+                                    "</span><br />" +
+                                    "<span class='g-sub'>" +
+                                    `${disctrict}` +
+                                    "</span>" +
+                                    "</div>" +
+                                    "<span  style='color: red'>No data</span>" +
+                                    "<span class='g-value'></span>"
+                                );
+                        }
+                    })
+                    .on('click', function (d) {
+                        console.log('CLICKED !!!')
+                        const municipalityName = d.properties.NAME_2
+                        var tableData = document.getElementById("municipalityTableData");
+                        tableData.innerHTML = municipalityName;
+                        console.log(municipalityName)
+                        console.log('CLICKED !!!')
+                    });
+
+                // LEgend
+                // var colorScale1 = d3.scaleSequential(d3.interpolatePlasma).domain([0, 9]);
+                var colorScale1 = d3.scaleSequential(d3.interpolateCool).domain([0, 9]);
+                const colorScaleLinear1 = d3.scaleLinear()
+                    .domain([0,9])
+                    //I goofed, so this has to be in reverse order
+                    .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"]);
+                console.log('colorScale1')
+                console.log('scaleToNewMinMax', scaleToNewMinMax(285, 0, 289))
+                console.log('scaleToNewMinMax(8)=', scaleToNewMinMax(8, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(6)=', scaleToNewMinMax(6, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(4)=', scaleToNewMinMax(4, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(1)=', scaleToNewMinMax(1, 0, 9, minDrugValue, maxDrugValue))
+                console.log('mathRound', mathRound(8.888, 0))
+                const legendLength = 9*20
+                let dif = colorScale.domain()[1] - colorScale.domain()[0];
+                let intervals = d3.range(8).map(function(d,i) {
+                    return dif * i / 8 + colorScale.domain()[0]
+                })
+                intervals.push(colorScale.domain()[1]);
+                let intervalHeight = legendLength / intervals.length;
+
+                console.log('Legend====================')
+                console.log('colorScale.domain()=',colorScale.domain())
+                console.log('legendLength=',legendLength)
+                console.log('dif=',dif)
+                console.log('intervals=',intervals)
+                console.log('intervalHeight=',intervalHeight)
+                console.log(colorScale1(2))
+                console.log(colorScale(2))
+                legend2.selectAll('.colorbar')
+                    .data(d3.range(9))
+                    .enter().append('svg:rect')
+                    .attr('y', d => d * 20 + 'px')
+                    .attr('height', '20px')
+                    .attr('width', '20px')
+                    .attr('x', '0px')
+                    .attr("class", d => "q" + d + "-9")
+                    .attr("id", d => "legend" + d + "-9")
+                    // TODO: Stop init()
+                    .style('fill', function (d) {
+                        const col = scaleToNewMinMax(d, 0, 9, minDrugValue, maxDrugValue)
+                        // return colorScaleLinear(col)
+                        // return colorScaleLinear1(d)
+                        console.log('INTERVAL=', colorScale(intervals[d]))
+                        console.log('INTERVAL=Test1', colorScale(6))
+                        console.log('INTERVAL=Test2', colorScale(52594))
+                        console.log('INTERVAL=Test2', colorScale(52594)[5])
+                        console.log('TYPEEEEEEEE=Test2', typeof colorScale(52594))
+                        console.log('getColorFromRGB=Test2', getColorFromRGB(colorScale(52594)))
+                        return colorScale(intervals[d])
+                    })
+                    .on("mouseover", function(d) {
+
+                        const legendID = 'legend' + d + '-9'
+                        const currentLegendSquare = document.getElementById(legendID)
+                        const offset = getOffset(currentLegendSquare)
+                        legendCursor.transition()
+                            .duration(200)
+                            .style("opacity", 1);
+                        legendCursor
+                            .style("left", (offset.left - 11) +'px')
+                            .style("top", offset.top + 'px')
+                            .style('border-left', '10px solid ' + colorScale(intervals[d]))
+
+                        const groupClass = '.group' + d
+                        console.log('groupClass=',groupClass)
+                        d3.selectAll(groupClass)
+                            .style('fill', "#95acb7")
+                            .style('opacity', 0.8);
+                    })
+                    .on("mouseout", function(d) {
+                        legendCursor.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+
+                        const groupClass = '.group' + d
+                        console.log('groupClass=',groupClass)
+                        d3.selectAll(groupClass)
+                            .style('fill', colorScale(intervals[d]))
+                            .style("opacity", 1);
+                    });
+                var legendScale = d3.scaleLinear()
+                    .domain([minDrugValue, maxDrugValue])
+                    .range([0, 9 * 20]);
+                var legendAxis = svg.append("g")
+                    // .attr('transform', 'translate(850, 400)')
+                    .attr('transform', 'translate(850, 400)')
+                    .call(d3.axisRight(legendScale).ticks(1));
+
+                // Big data text
+                var margin = ({top: 10, right: 10, bottom: 20, left: 20})
+                // Add a background label for the current year.
+                const yearLabel = svg
+                    .append('text')
+                    .attr("id", "yearText")
+                    .attr('class', 'year')
+                    .attr('x', 40)
+                    .attr('y', height - margin.bottom - 20)
+                    .attr('fill', '#ccc')
+                    .attr('font-family', 'Helvetica Neue, Arial')
+                    .attr('font-weight', 500)
+                    .attr('font-size', 80)
+                    // TODO: Stop init()
+                    .text(year);
+
+            });
+    }
+    // ---------------------------- END OF ------------------------------------------------------
+
+    // ---------------------------- Load data  --------------------------------------------------
+    const dataDrugs = {}
+    console.log('dataDrugs-->')
+    console.log(dataDrugs)
+    console.log('dataDrugs.Ale=', Object.keys(dataDrugs.Ale).length, ' BACK=', dataDrugs['Bollnäs'])
+    console.log(dataDrugs.Ale)
+    console.log('dataDrugs')
+    // ---------------------------- END OF ------------------------------------------------------
+
+    // ---------------------------- Load data  ----------------------------------------------------
+    // ---------------------------- END OF ------------------------------------------------------
+    // ---------------------------- Load data  ----------------------------------------------------
+    // ---------------------------- END OF ------------------------------------------------------
+    function update(dataIndex, year, drugType='cocaine') {
+        const drugVal = getMaxMinData(dataDrugs, year, drugType)
+        const maxDrugValue = mathRound(drugVal.maxDrugValue, 0)
+        const minDrugValue = mathRound(drugVal.minDrugValue, 0)
+        const drugValues = drugVal.drugValues
+        const scaledDrugValues = drugValues.map(function (e, index) {
+            return scaleToNewMinMaxContinuous(e, minDrugValue, maxDrugValue)
+        })
+        console.log('MaxofDATA************: ', maxDrugValue)
+        console.log('MinofDATA------------: ', minDrugValue)
+        console.log('drugValues------------: ', drugValues)
+        console.log('scaledDrugValues------------: ', scaledDrugValues)
+        let domainRange = Object.entries(dataIndex).map(
+            function (element, index) {
+                return element[1]
+            }
+        )
+        // domainRange = selectDivisionNumber(domainRange)
+        domainRange = selectDivisionNumber(drugValues)
+        console.log('domainRange+++++++++++')
+        console.log(domainRange)
+        // const colorScale = d3.scaleSequential(d3.interpolateCool).domain([minDrugValue,maxDrugValue]);
+        // const colorScale = d3.scaleSequential(d3.interpolateCool).domain(drugValues);
+        const colorScaleLinear = d3.scaleLinear()
+            .domain(drugValues)
+            //I goofed, so this has to be in reverse order
+            .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"].reverse());
+        // no works const colorScale = d3.scaleSequential(d3.interpolateRgb("red",'green')(0.5)).domain([0,289]);
+        const colorScale = d3.scaleSequential(d3.interpolateRgb("blue",'red')).domain(drugValues);
+        const legendInterval = getLegendInterval(colorScale, 9, 9*20)
+        console.log('----------legendInterval+++++++++++')
+        console.log(legendInterval)
+        const url1 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/sweden-counties.geojson"
+        const url2 = "https://raw.githubusercontent.com/benedictmulongo/maps-visualization/main/dataGeoJson/svenska_kommuner.geojson"
+
+
+        d3.json(url2,
+            function (error, data) {
+                // https://stackoverflow.com/questions/14492284/center-a-map-in-d3-given-a-geojson-object
+                // create a first guess for the projection
+                const center = d3.geoCentroid(data);
+                let scale  = 1145;
+                let offset = [width/2, height/2];
+                let projection = d3.geoMercator()
+                    .scale(scale)
+                    .center(center)
+                    .translate(offset);
+
+                // create the path
+                let path = d3.geoPath(projection);
+
+                // using the path determine the bounds of the current map and use
+                // these to determine better values for the scale and translation
+                const bounds = path.bounds(data);
+                const hscale = scale * width / (bounds[1][0] - bounds[0][0]);
+                const vscale = scale * height / (bounds[1][1] - bounds[0][1]);
+                scale = (hscale < vscale) ? hscale : vscale;
+                offset = [width - (bounds[0][0] + bounds[1][0]) / 2,
+                    height - (bounds[0][1] + bounds[1][1]) / 2];
+
+                // new projection
+                projection = d3.geoMercator()
+                    .center(center)
+                    .scale(scale)
+                    .translate(offset);
+                path = path.projection(projection);
+
+                console.log('ok------>')
+                console.log(data)
+                console.log()
+                console.log(data.features)
+                console.log('dataMunicipality=')
+                // console.log(municipalityJson)
+                console.log('**************************************')
+                g.selectAll('path')
+                    .data(data.features)
+                    .enter()
+                    .append('path')
+                    .attr('class', 'ben')
+                    .attr("id", "municipalities")
+                    .attr('d', path)
+                    // TODO: Stop init()
+                    .attr('class', function (d) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        let uRate = dataIndex[municipality]
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                            const rowCount = currentData[year]['metadata']['rowCount']
+                            const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                            const legendColorSpace = legendInterval.legendColorSpace
+                            const currentMapRGBColor = colorScale(avgDrugValue)
+                            let closestColorDist = Number.MAX_SAFE_INTEGER
+                            let closestColorIndex = undefined
+                            legendColorSpace.forEach(function (e, index) {
+                                const key = getColorFromRGB(currentMapRGBColor)
+                                const compareKey = getColorFromRGB(e)
+                                const dist = getDistanceRGB(key, compareKey)
+                                if(closestColorDist > dist) {
+                                    closestColorDist = dist
+                                    closestColorIndex = index
+                                }
+                            })
+                            return 'state' + " " + 'group' + closestColorIndex
+                        } else {
+                            // Fill blank
+                            return 'state' + " " + 'groupNoData'
+                        }
+                    })
+                    .style('opacity', function (d) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        return len > 0 && (currentData[year] !== undefined) ? 1 : 0.2
+                        // if(len > 0 && (currentData[year] !== undefined)) {
+                    })
+                    .style("fill",
+                        function(d)
+                        {
+                            // return data[d.id].color;
+                            // console.log('Data-->', d)
+                            // console.log('-> ', dataIndex[d.properties.NAME_2])
+                            // console.log()
+                            // return "#FFE500";
+                            console.log(' STOP ** STOP ** STOP ** STOP ** STOP ** STOP ** ')
+                            console.log('Test colorScaleThreshold = ', colorScaleThreshold(250))
+                            const municipality = d.properties.NAME_2
+                            const currentData = dataDrugs[municipality]
+                            const len = Object.keys(currentData).length
+                            let uRate = dataIndex[municipality]
+                            console.log('Name=', municipality,', Fill=', dataDrugs[municipality])
+                            if(len > 0 && (currentData[year] !== undefined)) {
+                                const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                const rowCount = currentData[year]['metadata']['rowCount']
+                                const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                return colorScale(avgDrugValue)
+                            } else {
+                                // Fill blank
+                                return '#808080'
+                            }
+                        })
+                    .on("mouseover",
+                        function (d) {
+                            const municipality = d.properties.NAME_2
+                            const currentData = dataDrugs[municipality]
+                            const len = Object.keys(currentData).length
+                            if(len > 0 && (currentData[year] !== undefined)) {
+                                const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                const rowCount = currentData[year]['metadata']['rowCount']
+                                const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                // return colorScale(avgDrugValue)
+                                d3.select(this)
+                                    .style("fill", tinycolor(colorScale(avgDrugValue)).darken(15).toString())
+                                    //.style("fill", "#e3929b")
+                                    .style("cursor", "pointer")
+                                    .style('stroke-width', 2)
+                                    .style('stroke', '#ffffff');
+
+                                //Any time the mouse moves, the tooltip should be at the same position
+                                // translate(825, 400)
+                                const legendColorSpace = legendInterval.legendColorSpace
+                                const currentMapRGBColor = colorScale(avgDrugValue)
+                                let closestColorDist = Number.MAX_SAFE_INTEGER
+                                let closestColorIndex = undefined
+                                legendColorSpace.forEach(function (e, index) {
+                                    const key = getColorFromRGB(currentMapRGBColor)
+                                    const compareKey = getColorFromRGB(e)
+                                    const dist = getDistanceRGB(key, compareKey)
+                                    if(closestColorDist > dist) {
+                                        closestColorDist = dist
+                                        closestColorIndex = index
+                                    }
+                                })
+
+                                const currentVal = dataIndex[d.properties.NAME_2]
+                                const scaledCurrentVal = scaleToNewMinMax(avgDrugValue, minDrugValue, maxDrugValue)
+                                const legendID = 'legend' + closestColorIndex + '-9'
+                                const currentLegendSquare = document.getElementById(legendID)
+                                const offset = getOffset(currentLegendSquare)
+                                let uRate = dataIndex[d.properties.NAME_2];
+                                legendCursor.transition()
+                                    .duration(200)
+                                    .style("opacity", 1);
+                                legendCursor
+                                    .style("left", (offset.left - 11) +'px')
+                                    .style("top", offset.top + 'px')
+                                    .style('border-left', '10px solid ' + currentMapRGBColor)
+
+                            }
+                            else {
+                                // --
+                                d3.select(this)
+                                    .style("fill",
+                                        function () {
+                                            return '#a9a9a9'
+                                        })
+                                    .style("cursor", "pointer")
+                                    .style('stroke-width', 2);
+                                const legendID =  'noDataLegend'
+                                const currentLegendSquare = document.getElementById(legendID)
+                                const offset = getOffset(currentLegendSquare)
+                                legendCursor.transition()
+                                    .duration(200)
+                                    .style("opacity", 1);
+                                legendCursor
+                                    .style("left", (offset.left - 11) +'px')
+                                    .style("top", (offset.top - 2) + 'px')
+                                    .style('border-left', '10px solid #838383')
+                            }
+                        })
+                    .on("mouseout", function (d, i) {
+                        const municipality = d.properties.NAME_2
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            d3.select(this)
+                                .style("fill",
+                                    function () {
+                                        let uRate = dataIndex[d.properties.NAME_2];
+                                        const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                                        const rowCount = currentData[year]['metadata']['rowCount']
+                                        const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                                        return colorScale(avgDrugValue)
+                                        // return colorScale(uRate)
+                                    })
+                                .style('stroke-width', 0.5)
+                                .style('stroke', '#000000');
+                        } else {
+                            // --
+                            d3.select(this)
+                                .style("fill",
+                                    function () {
+                                        return '#808080'
+                                    })
+                                .style('stroke-width', 0.5);
+                        }
+
+                        legendCursor.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                        tooltip.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+                    })
+                    .on('mousemove', function (d) {
+                        tooltip.transition()
+                            .duration(200)
+                            .style("opacity", 0.9);
+                        //Any time the mouse moves, the tooltip should be at the same position
+                        tooltip.style("left", (d3.event.pageX - 110) + "px")
+                            .style("top", (d3.event.pageY - 90) + "px");
+
+                        let municipality = d.properties.NAME_2
+                        let disctrict = d.properties.NAME_1
+                        let uRate = dataIndex[municipality]
+                        const currentData = dataDrugs[municipality]
+                        const len = Object.keys(currentData).length
+                        if(len > 0 && (currentData[year] !== undefined)) {
+                            const drugVal = currentData[year]['metadata']['drugtype'][drugType]
+                            const rowCount = currentData[year]['metadata']['rowCount']
+                            const avgDrugValue = mathRound(drugVal / rowCount, 0)
+                            tooltip
+                                //The text inside should be State: rate%'
+                                //.text(()=> `${municipality}: ${uRate}%`)
+                                .html(
+                                    "<div class='g-place'>" +
+                                    "<span class='g-headline'>" +
+                                    `${municipality}` +
+                                    "</span><br />" +
+                                    "<span class='g-sub'>" +
+                                    `${disctrict}` +
+                                    "</span>" +
+                                    "</div>" +
+                                    "<span>Nivå</span>" +
+                                    "<span class='g-value'>" +
+                                    `${avgDrugValue}` +
+                                    " mg/l</span>"
+                                );
+                        } else {
+                            tooltip
+                                .html(
+                                    "<div class='g-place'>" +
+                                    "<span class='g-headline'>" +
+                                    `${municipality}` +
+                                    "</span><br />" +
+                                    "<span class='g-sub'>" +
+                                    `${disctrict}` +
+                                    "</span>" +
+                                    "</div>" +
+                                    "<span  style='color: red'>No data</span>" +
+                                    "<span class='g-value'></span>"
+                                );
+                        }
+                    })
+                    .on('click', function (d) {
+                        console.log('CLICKED !!!')
+                        const municipalityName = d.properties.NAME_2
+                        var tableData = document.getElementById("municipalityTableData");
+                        tableData.innerHTML = municipalityName;
+                        console.log(municipalityName)
+                        console.log('CLICKED !!!')
+                    });
+
+                // LEgend
+                // var colorScale1 = d3.scaleSequential(d3.interpolatePlasma).domain([0, 9]);
+                var colorScale1 = d3.scaleSequential(d3.interpolateCool).domain([0, 9]);
+                const colorScaleLinear1 = d3.scaleLinear()
+                    .domain([0,9])
+                    //I goofed, so this has to be in reverse order
+                    .range(["#0072b0", "#3bb0ec", "#8bd7ff", "#c9ecff"]);
+                console.log('colorScale1')
+                console.log('scaleToNewMinMax', scaleToNewMinMax(285, 0, 289))
+                console.log('scaleToNewMinMax(8)=', scaleToNewMinMax(8, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(6)=', scaleToNewMinMax(6, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(4)=', scaleToNewMinMax(4, 0, 9, minDrugValue, maxDrugValue))
+                console.log('scaleToNewMinMax(1)=', scaleToNewMinMax(1, 0, 9, minDrugValue, maxDrugValue))
+                console.log('mathRound', mathRound(8.888, 0))
+                const legendLength = 9*20
+                let dif = colorScale.domain()[1] - colorScale.domain()[0];
+                let intervals = d3.range(8).map(function(d,i) {
+                    return dif * i / 8 + colorScale.domain()[0]
+                })
+                intervals.push(colorScale.domain()[1]);
+                let intervalHeight = legendLength / intervals.length;
+
+                console.log('Legend====================')
+                console.log('colorScale.domain()=',colorScale.domain())
+                console.log('legendLength=',legendLength)
+                console.log('dif=',dif)
+                console.log('intervals=',intervals)
+                console.log('intervalHeight=',intervalHeight)
+                console.log(colorScale1(2))
+                console.log(colorScale(2))
+                legend2.selectAll('.colorbar')
+                    .data(d3.range(9))
+                    .enter().append('svg:rect')
+                    .attr('y', d => d * 20 + 'px')
+                    .attr('height', '20px')
+                    .attr('width', '20px')
+                    .attr('x', '0px')
+                    .attr("class", d => "q" + d + "-9")
+                    .attr("id", d => "legend" + d + "-9")
+                    // TODO: Stop init()
+                    .style('fill', function (d) {
+                        const col = scaleToNewMinMax(d, 0, 9, minDrugValue, maxDrugValue)
+                        // return colorScaleLinear(col)
+                        // return colorScaleLinear1(d)
+                        console.log('INTERVAL=', colorScale(intervals[d]))
+                        console.log('INTERVAL=Test1', colorScale(6))
+                        console.log('INTERVAL=Test2', colorScale(52594))
+                        console.log('INTERVAL=Test2', colorScale(52594)[5])
+                        console.log('TYPEEEEEEEE=Test2', typeof colorScale(52594))
+                        console.log('getColorFromRGB=Test2', getColorFromRGB(colorScale(52594)))
+                        return colorScale(intervals[d])
+                    })
+                    .on("mouseover", function(d) {
+
+                        const legendID = 'legend' + d + '-9'
+                        const currentLegendSquare = document.getElementById(legendID)
+                        const offset = getOffset(currentLegendSquare)
+                        legendCursor.transition()
+                            .duration(200)
+                            .style("opacity", 1);
+                        legendCursor
+                            .style("left", (offset.left - 11) +'px')
+                            .style("top", offset.top + 'px')
+                            .style('border-left', '10px solid ' + colorScale(intervals[d]))
+
+                        const groupClass = '.group' + d
+                        console.log('groupClass=',groupClass)
+                        d3.selectAll(groupClass)
+                            .style('fill', "#95acb7")
+                            .style('opacity', 0.8);
+                    })
+                    .on("mouseout", function(d) {
+                        legendCursor.transition()
+                            .duration(500)
+                            .style("opacity", 0);
+
+                        const groupClass = '.group' + d
+                        console.log('groupClass=',groupClass)
+                        d3.selectAll(groupClass)
+                            .style('fill', colorScale(intervals[d]))
+                            .style("opacity", 1);
+                    });
+                var legendScale = d3.scaleLinear()
+                    .domain([minDrugValue, maxDrugValue])
+                    .range([0, 9 * 20]);
+                var legendAxis = svg.append("g")
+                    // .attr('transform', 'translate(850, 400)')
+                    .attr('transform', 'translate(850, 400)')
+                    .call(d3.axisRight(legendScale).ticks(1));
+
+                // Big data text
+                var margin = ({top: 10, right: 10, bottom: 20, left: 20})
+                // Add a background label for the current year.
+                const yearLabel = svg
+                    .append('text')
+                    .attr("id", "yearText")
+                    .attr('class', 'year')
+                    .attr('x', 40)
+                    .attr('y', height - margin.bottom - 20)
+                    .attr('fill', '#ccc')
+                    .attr('font-family', 'Helvetica Neue, Arial')
+                    .attr('font-weight', 500)
+                    .attr('font-size', 80)
+                    // TODO: Stop init()
+                    .text(year);
+
+            });
+    }
+
+    const drugType = 'cocaine'
+    update(dataIndex, slider.value, drugType);
+    const dataset = [dataIndex, dataIndexInteractive]
+    d3.select("input")
+        .on("change", function(d) {
+            console.log('Data has changed !!')
+            console.log(d)
+            console.log('***********************')
+            var yearInput = +d3.select(this).node().value;
+            const index = yearInput % 2
+            const current_data = dataset[index]
+            // update(current_data, slider.value)
+            console.log('yearInput')
+            console.log(yearInput)
+            console.log('yearInput % 2')
+            console.log(yearInput % 2)
+            let domainRange = Object.entries(current_data).map(
+                function (element, index) {
+                    return element[1]
+                }
+            )
+            domainRange = selectDivisionNumber(domainRange)
+            const colorScale = d3.scaleSequential(d3.interpolateCool).domain(domainRange);
+            svg.selectAll("#municipalities")
+                .style("fill",
+                    function(d)
+                    {
+                        // return data[d.id].color;
+                        // console.log('Data-->', d)
+                        // console.log('-> ', dataIndex[d.properties.NAME_2])
+                        // console.log()
+                        // return "#FFE500";
+                        let uRate = current_data[d.properties.NAME_2]
+                        return colorScale(uRate)
+                    })
+
+            svg.selectAll("#yearText")
+                .transition()
+                .duration(500)
+                .attr('fill', '#ccc')
+                .attr('font-family', 'Helvetica Neue, Arial')
+                .attr('font-weight', 500)
+                .attr('font-size', 80)
+                .text(yearInput)
+
+        });
+</script>
+
+</body>
+</html>
