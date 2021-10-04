@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.5.0/d3.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
+    <style>
+        .arrow-up {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+
+            border-bottom: 5px solid black;
+        }
+
+        .arrow-down {
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+
+            border-top: 20px solid #f00;
+        }
+
+        .arrow-left {
+            width: 0;
+            height: 0;
+            border-top: 10px solid transparent;
+            border-bottom: 10px solid transparent;
+            border-right:10px solid blue;
+        }
+
+        .arrow-right {
+            width: 0;
+            height: 0;
+            border-top: 20px solid transparent;
+            border-bottom: 20px solid transparent;
+            border-left: 20px solid green;
+        }
+    </style>
+</head>
+<body>
+<!--
+    <div class="arrow-up"></div>
+    <div class="arrow-down"></div>
+    <div class="arrow-left"></div>
+    -->
+    <div class="arrow-right"></div>
+<script type="text/javascript">
+    const colorScaleA = d3.scaleSequential(d3.interpolateCool).domain([0,289]);
+
+    console.log('colorScaleA=')
+    console.log(colorScaleA)
+    console.log(colorScaleA(250))
+    console.log()
+    /*
+    const colorScaleB = d3.scaleSequential(d3.interpolateCool).domain([0,289]).range([0,9]);
+    console.log('colorScaleB=')
+    console.log(colorScaleB)
+    console.log(colorScaleB(250))
+    console.log()
+     */
+
+
+</script>
+</body>
+</html>
